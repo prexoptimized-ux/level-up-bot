@@ -31,6 +31,30 @@ from message_ids import MESSAGE_ID_TO_NAME
 import thunderFF_pb2
 import StartMatch_pb2
 
+# ==================== APP.PY SMALL PROTO ====================
+from google.protobuf import descriptor as _descriptor
+from google.protobuf import descriptor_pool as _descriptor_pool
+from google.protobuf import symbol_database as _symbol_database
+from google.protobuf.internal import builder as _builder
+
+_sym_db = _symbol_database.Default()
+
+_DESCRIPTOR = _descriptor_pool.Default().AddSerializedFile(
+    b'\n\x12\x46reeFire_pb2.proto"c\n\x08LoginReq\x12\x0f\n\x07open_id\x18\x16 \x01(\t'
+    b'\x12\x14\n\x0copen_id_type\x18\x17 \x01(\t\x12\x13\n\x0blogin_token\x18\x1d '
+    b'\x01(\t\x12\x1b\n\x13orign_platform_type\x18\x63 \x01(\t\x62\x06proto3'
+)
+
+_globals = globals()
+_builder.BuildMessageAndEnumDescriptors(_DESCRIPTOR, _globals)
+_builder.BuildTopDescriptorsAndMessages(_DESCRIPTOR, "FreeFire_pb2", _globals)
+if not _descriptor._USE_C_DESCRIPTORS:
+    _DESCRIPTOR._loaded_options = None
+    _globals["_LOGINREQ"]._serialized_start = 22
+    _globals["_LOGINREQ"]._serialized_end = 121
+
+LoginReq = _globals["LoginReq"]
+
 # ==================== WEB DASHBOARD ====================
 from dashboard_server import bot_state, start_web_dashboard
 
@@ -39,18 +63,30 @@ WEB_HOST = "0.0.0.0"
 WEB_PORT = int(os.environ.get("SERVER_PORT", "20331"))
 ACCOUNTS_FILE = "accounts.json"
 TOKEN_CACHE_FILE = "token_cache.json"
-DEVICES_FILE = "devices.json"  # 🔥 NEW: Persistent device storage
+DEVICES_FILE = "devices.json"
 TOKEN_CACHE_TTL = 1200
 
-# 🔥 70+ MATCHES/HOUR + FULL MATCH
+RELEASE_VERSION = "OB55"
+CLIENT_VERSION  = "1.132.9"
+
+LOGIN_URLS = [
+    "https://loginbp.ppmainecoonghj.com/",
+    "https://vodka.freefireind.in/",
+    "https://loginbp.common.ggbluefox.com/",
+    "https://loginbp.ggpolarbear.com/",
+    "https://loginbp.ggblueshark.com/",
+    "https://loginbp.ggwhitehawk.com/",
+]
+
+CLIENT_BASE = "https://client.ind.freefiremobile.com/"
+
 START_MATCH_INTERVAL = 2.0
 NEW_MATCH_DELAY = 2.0
-MAX_MATCH_DURATION = 350        # Full LW match natural end (6 min)
+MAX_MATCH_DURATION = 350
 MATCH_IDLE_TIMEOUT = 10.0
-MAX_CONCURRENT_MATCHES = 15      # 7 parallel = 72 matches/hour
+MAX_CONCURRENT_MATCHES = 15
 PRIORITY_REGIONS = ["BD", "IND", "SG", "TH", "PH", "VN", "MY", "ID", "HK", "TW", "BR", "EU", "RU", "TR", "ME", "NA", "SAC", "US", "SSA"]
 
-#Anti-AFK
 ANTI_AFK_ENABLED = True
 ANTI_AFK_MIN_INTERVAL = 2.5
 ANTI_AFK_MAX_INTERVAL = 4.5
@@ -60,7 +96,7 @@ FALLBACK_UID = ""
 FALLBACK_PASSWORD = ""
 
 
-# ==================== ULTRA SAFE PERSISTENT DEVICE RANDOMIZER (1:1 ACCOUNT SYNC) ====================
+# ==================== DEVICE RANDOMIZER ====================
 def _generate_new_device() -> dict:
     device_list = [
         ("Samsung", "SM-G998B", "Adreno (TM) 660", "Android OS 12 / API-31"),
@@ -87,12 +123,6 @@ def _generate_new_device() -> dict:
     }
 
 def sync_devices_with_accounts() -> dict:
-    """
-    Enforces strict 1-to-1 parity between accounts.json and devices.json:
-    - len(devices) == len(accounts) ALWAYS (not one less, not one more).
-    - If accounts.json has 45 IDs, exactly 45 devices are kept/created.
-    - If an account is deleted from web or file, its device is immediately purged.
-    """
     accounts = load_accounts()
     devices = {}
     if os.path.exists(DEVICES_FILE):
@@ -130,7 +160,6 @@ def sync_devices_with_accounts() -> dict:
                 aliases.insert(0, str(bot_state.account_token_map[tok_pfx]))
             if tok in bot_state.account_token_map:
                 aliases.insert(0, str(bot_state.account_token_map[tok]))
-
             acc_key = aliases[0] if aliases else tok_pfx
 
         if not acc_key:
@@ -143,7 +172,6 @@ def sync_devices_with_accounts() -> dict:
                 break
         if not dev_profile and acc_key in devices:
             dev_profile = devices[acc_key]
-
         if not dev_profile:
             dev_profile = _generate_new_device()
 
@@ -158,10 +186,6 @@ def sync_devices_with_accounts() -> dict:
     return synced_devices
 
 def get_device_for_account(account_identifier: str) -> dict:
-    """
-    Retrieves or assigns the persistent device profile for the given account identifier.
-    Guarantees that 1 account = 1 device.
-    """
     devices = {}
     if os.path.exists(DEVICES_FILE):
         try:
@@ -176,7 +200,6 @@ def get_device_for_account(account_identifier: str) -> dict:
     if acc_key in devices:
         return devices[acc_key]
 
-    # Check known aliases
     for alias in [bot_state.auth_to_game_id.get(acc_key),
                   bot_state.game_to_auth_id.get(acc_key),
                   bot_state.account_token_map.get(acc_key),
@@ -202,20 +225,18 @@ def get_device_for_account(account_identifier: str) -> dict:
     return new_device
 
 
-# ==================== CLOUDFLARE DNS RESOLVER & SOCKET OPTIMIZERS ====================
+# ==================== CLOUDFLARE DNS ====================
 CLOUDFLARE_PRIMARY_DNS = "1.1.1.1"
 CLOUDFLARE_SECONDARY_DNS = "1.0.0.1"
 _DNS_CACHE: Dict[str, Tuple[str, float]] = {}
-_DNS_CACHE_TTL = 300.0  # 5 minutes DNS cache
+_DNS_CACHE_TTL = 300.0
 
 async def resolve_host_cloudflare(hostname: str) -> str:
     if not hostname:
         return hostname
-
     parts = hostname.split('.')
     if len(parts) == 4 and all(p.isdigit() and 0 <= int(p) <= 255 for p in parts):
         return hostname
-
     now = time.time()
     if hostname in _DNS_CACHE:
         ip, exp = _DNS_CACHE[hostname]
@@ -229,12 +250,10 @@ async def resolve_host_cloudflare(hostname: str) -> str:
             header = struct.pack(">HHHHHH", tx_id, 0x0100, 1, 0, 0, 0)
             qname = b"".join(bytes([len(part)]) + part.encode('ascii') for part in hostname.split('.')) + b"\x00"
             query_pkt = header + qname + struct.pack(">HH", 1, 1)
-
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(1.2)
             s.sendto(query_pkt, (server_ip, 53))
             resp, _ = s.recvfrom(1024)
-
             if len(resp) >= 12:
                 ancount = struct.unpack(">H", resp[6:8])[0]
                 if ancount > 0:
@@ -276,7 +295,6 @@ async def resolve_host_cloudflare(hostname: str) -> str:
                 ip = ip_info[0][4][0]
         except Exception:
             ip = hostname
-
     if ip:
         _DNS_CACHE[hostname] = (ip, now + _DNS_CACHE_TTL)
     return ip or hostname
@@ -286,7 +304,6 @@ def optimize_tcp_socket(sock: socket.socket):
     try:
         sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-        # Fast keep-alive probes on Windows (10s idle, 2s interval)
         if hasattr(socket, "SIO_KEEPALIVE_VALS") and os.name == 'nt':
             try:
                 sock.ioctl(socket.SIO_KEEPALIVE_VALS, (1, 10000, 2000))
@@ -318,7 +335,6 @@ async def safe_close_writer(writer):
         pass
 
 
-
 def optimize_udp_socket(sock: socket.socket):
     try:
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, 131072)
@@ -331,41 +347,23 @@ def optimize_udp_socket(sock: socket.socket):
     except Exception:
         pass
 
-# ============================================================
-# 🔥 ANTI-AFK — Movement + Fire Simulation
-# ============================================================
 
+# ============================================================
+# 🔥 ANTI-AFK
+# ============================================================
 async def send_anti_afk_movement(sock, server_addr, udp_key_bytes, match_code, account_id):
-    """
-    Simulated movement packet — server ko lagta hai player chal raha hai.
-    Uses UDP_PLAYER_STATE_SYNC-like structure for anti-AFK.
-    """
     try:
         nr = (await layouts_from_mask(match_code))[1]
-
-        # Random direction vector (chhota movement)
         rand_x = random.randint(-100, 100)
         rand_y = random.randint(-50, 50)
         rand_z = random.randint(-100, 100)
-
-        # Timestamp
         ts = int(time.time() * 1000) & 0xFFFFFFFF
-
-        # Player ID
         try:
             player_id = int(account_id)
         except Exception:
             player_id = 0
-
-        # Body: [player_id(4) | ts(4) | x(4) | y(4) | z(4) | state(2)]
         body = struct.pack("<IIiiiH", player_id & 0xFFFFFFFF, ts, rand_x, rand_y, rand_z, 1)
-
-        # Movement ke liye RUDP cmd 104 (START_FIRE) ke bajaye generic player state
-        # Use msg_key 0x6B (safe) aur cmd 2001 (UDP_PLAYER_STATE_SYNC)
-        pkt = await build_packet(
-            0x6B, nr, 0, 2001, None, 0,
-            body, udp_key_bytes, encrypted=False
-        )
+        pkt = await build_packet(0x6B, nr, 0, 2001, None, 0, body, udp_key_bytes, encrypted=False)
         loop = asyncio.get_event_loop()
         await loop.sock_sendto(sock, pkt, server_addr)
         return True
@@ -374,42 +372,22 @@ async def send_anti_afk_movement(sock, server_addr, udp_key_bytes, match_code, a
 
 
 async def send_anti_afk_fire(sock, server_addr, udp_key_bytes, match_code, account_id):
-    """
-    Simulated fire button click — server ko active signal.
-    Uses RUDP_START_FIRE (cmd 104) + RUDP_STOP_FIRE (cmd 105) sequence.
-    """
     try:
         nr = (await layouts_from_mask(match_code))[1]
-
         try:
             player_id = int(account_id)
         except Exception:
             player_id = 0
-
         ts = int(time.time() * 1000) & 0xFFFFFFFF
-
-        # FIRE START body: [player_id(4) | ts(4) | weapon_id(2) | fire_mode(1)]
-        weapon_id = random.choice([101, 102, 103, 201, 202])   # random weapon
+        weapon_id = random.choice([101, 102, 103, 201, 202])
         fire_body = struct.pack("<IIHB", player_id & 0xFFFFFFFF, ts, weapon_id, 1)
-
-        # Send FIRE START
-        fire_pkt = await build_packet(
-            0x68, nr, 0, 104, None, 0,
-            fire_body, udp_key_bytes, encrypted=False
-        )
+        fire_pkt = await build_packet(0x68, nr, 0, 104, None, 0, fire_body, udp_key_bytes, encrypted=False)
         loop = asyncio.get_event_loop()
         await loop.sock_sendto(sock, fire_pkt, server_addr)
-
-        # 150-300ms baad FIRE STOP bhejo
         await asyncio.sleep(random.uniform(0.15, 0.30))
-
         stop_body = struct.pack("<IIHB", player_id & 0xFFFFFFFF, ts + 200, weapon_id, 0)
-        stop_pkt = await build_packet(
-            0x68, nr, 0, 105, None, 0,
-            stop_body, udp_key_bytes, encrypted=False
-        )
+        stop_pkt = await build_packet(0x68, nr, 0, 105, None, 0, stop_body, udp_key_bytes, encrypted=False)
         await loop.sock_sendto(sock, stop_pkt, server_addr)
-
         return True
     except Exception:
         return False
@@ -417,52 +395,32 @@ async def send_anti_afk_fire(sock, server_addr, udp_key_bytes, match_code, accou
 
 async def anti_afk_worker(sock, resolved_ip, port, udp_key_bytes, match_code,
                           account_id, stop_event, match_index):
-    """
-    Continuously sends movement + fire packets so server doesn't cancel the match.
-    Runs for the entire match duration.
-    """
     loop = asyncio.get_event_loop()
     server_addr = (resolved_ip, port)
     fire_count = 0
     move_count = 0
-
     try:
-        # Match start hone ke 2-3 sec baad shuru karo
         await asyncio.sleep(2.5)
-
         while not stop_event.is_set():
             try:
                 roll = random.random()
-
                 if roll < ANTI_AFK_FIRE_CHANCE:
-                    # 🔥 FIRE click
-                    ok = await send_anti_afk_fire(
-                        sock, server_addr, udp_key_bytes, match_code, account_id
-                    )
+                    ok = await send_anti_afk_fire(sock, server_addr, udp_key_bytes, match_code, account_id)
                     if ok:
                         fire_count += 1
-                    # Kabhi kabhi saath me movement bhi
                     if random.random() < 0.4:
-                        await send_anti_afk_movement(
-                            sock, server_addr, udp_key_bytes, match_code, account_id
-                        )
+                        await send_anti_afk_movement(sock, server_addr, udp_key_bytes, match_code, account_id)
                         move_count += 1
                 else:
-                    # 🎮 MOVEMENT only
-                    ok = await send_anti_afk_movement(
-                        sock, server_addr, udp_key_bytes, match_code, account_id
-                    )
+                    ok = await send_anti_afk_movement(sock, server_addr, udp_key_bytes, match_code, account_id)
                     if ok:
                         move_count += 1
-
-                # Random delay between 1.8s to 3.5s
                 wait_time = random.uniform(ANTI_AFK_MIN_INTERVAL, ANTI_AFK_MAX_INTERVAL)
                 try:
                     await asyncio.wait_for(stop_event.wait(), timeout=wait_time)
-                    break  # stop_event set ho gaya
+                    break
                 except asyncio.TimeoutError:
                     pass
-
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -470,14 +428,12 @@ async def anti_afk_worker(sock, resolved_ip, port, udp_key_bytes, match_code,
     except asyncio.CancelledError:
         pass
     finally:
-        # Summary log
         try:
             if fire_count + move_count > 0:
-                print_info(
-                    f"[🎮] Anti-AFK #{match_index} | Fires: {fire_count} | Moves: {move_count} | UID: {str(account_id)}"
-                )
+                print_info(f"[🎮] Anti-AFK #{match_index} | Fires: {fire_count} | Moves: {move_count} | UID: {str(account_id)}")
         except Exception:
             pass
+
 
 # ==================== NETWORK & CRYPTO ====================
 client = httpx.AsyncClient(
@@ -496,7 +452,7 @@ headers = {
     'X-Unity-Version': '2018.4.12f1',
     'X-GA-SV': '1789535859',
     'X-GA': 'v1 1',
-    'ReleaseVersion': 'OB55'
+    'ReleaseVersion': RELEASE_VERSION
 }
 
 AES_KEY = b'Yg&tc%DEuh6%Zc^8'
@@ -525,28 +481,6 @@ _DELTA = 0x9E3779B9
 _ROUNDS = 16
 _FIELD_SIZES = {0: 1, 1: 2, 2: 2, 3: 1, 4: 2}
 _FIELD_NAMES = {0: "sendOption", 1: "cmd", 2: "orderId", 3: "flags", 4: "length"}
-
-sai_tail_dul = bytes.fromhex(
-    "0101030101045452000103000100000410312e3133302e3232"
-    "1432303139313231303430ca0163736f7665727365612e737472"
-    "6f6e67686f6c642e66726565666972656d6f62696c652e636f6d"
-    "3b302e302e302e303b33342e3132362e37362e34353b33342e38"
-    "372e3137372e31343b33342e38372e3137302e3233303b33352e"
-    "3138352e3138332e353700000000000001000000000000000000"
-    "0000000100000000000100000000000100b8eeec91c5d7ffde110200"
-)
-
-headers = {
-    'User-Agent': 'UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)',
-    'Connection': 'Keep-Alive',
-    'Accept-Encoding': 'gzip',
-    'Content-Type': 'application/x-www-form-urlencoded',
-    'Expect': '100-continue',
-    'X-Unity-Version': '2018.4.12f1',
-    'X-GA-SV': '1789535859',
-    'X-GA': 'v1 1',
-    'ReleaseVersion': 'OB55'
-}
 
 class Colors:
     HEADER = '\033[95m'
@@ -607,6 +541,7 @@ def get_proto_field(d, key, default=None):
     return default
 
 
+
 # ==================== PER-ACCOUNT MATCH COUNTER ====================
 _match_counters: Dict[str, int] = {}
 _match_counter_lock = asyncio.Lock()
@@ -658,7 +593,6 @@ def _load_token_cache() -> Dict[str, Any]:
     now = time.time()
     if _token_cache_memo and (now - _token_cache_memo_time) < _TOKEN_CACHE_MEMO_TTL:
         return _token_cache_memo
-
     if not os.path.exists(TOKEN_CACHE_FILE):
         return {}
     try:
@@ -674,7 +608,7 @@ def _load_token_cache() -> Dict[str, Any]:
         _token_cache_memo_time = now
         return parsed
     except Exception as e:
-        print_error(f"Token cache corrupt → deleting: {e}")
+        print_error(f"Token cache corrupt -> deleting: {e}")
         try:
             os.remove(TOKEN_CACHE_FILE)
         except Exception:
@@ -705,7 +639,7 @@ def cache_get(uid: str) -> Optional[Dict]:
     if str(entry.get("account_id", "")).isdigit():
         entry["account_id"] = int(entry["account_id"])
     if not isinstance(entry.get("login_payload_data"), (bytes, bytearray)):
-        print_warning(f"[CACHE] UID {uid} missing payload → invalidating")
+        print_warning(f"[CACHE] UID {uid} missing payload -> invalidating")
         cache_invalidate(uid)
         return None
     return entry
@@ -726,82 +660,52 @@ def cache_invalidate(uid: str):
         print_warning(f"[CACHE] Invalidated: {uid}")
 
 
-# ==================== ENCRYPTION & PROTOBUF ====================
-
+# ==================== ENCRYPTION ====================
 async def aes_encrypt(payload, key, iv):
     cipher = AES.new(key, AES.MODE_CBC, iv)
     return cipher.encrypt(pad(payload, AES.block_size))
 
-_VERSION_CONFIG_CACHE = None
-_VERSION_CONFIG_CACHE_TIME = 0.0
-_VERSION_CONFIG_TTL = 1800.0  # 30 minutes cache for all accounts
 
+# ==================== VERSION CONFIG ====================
 async def get_playstore_version():
-    loop = asyncio.get_event_loop()
-    try:
-        result = await loop.run_in_executor(
-            None,
-            lambda: play_scraper('com.dts.freefireth', lang='hi', country='id')
-        )
-        return result.get("version")
-    except Exception:
-        return "1.132.6"
+    return CLIENT_VERSION
+
 
 async def version_config():
-    global _VERSION_CONFIG_CACHE, _VERSION_CONFIG_CACHE_TIME
-    now = time.time()
-    if _VERSION_CONFIG_CACHE and (now - _VERSION_CONFIG_CACHE_TIME) < _VERSION_CONFIG_TTL:
-        return _VERSION_CONFIG_CACHE
+    loop = asyncio.get_event_loop()
+    for url in LOGIN_URLS:
+        host = url.replace("https://", "").replace("http://", "").rstrip("/")
+        try:
+            await loop.getaddrinfo(host, 443)
+            return RELEASE_VERSION, CLIENT_VERSION, url.rstrip("/")
+        except Exception:
+            continue
+    return RELEASE_VERSION, CLIENT_VERSION, LOGIN_URLS[0].rstrip("/")
 
-    try:
-        app_version = await get_playstore_version() or "1.132.6"
-        api_url = (
-            "https://version.ggwhitehawk.com/live/ver.php"
-            f"?version={app_version}"
-            "&lang=hi&device=android&channel=android"
-            "&appstore=googleplay&region=IND"
-            "&whitelist_version=1.3.0&whitelist_sp_version=1.0.0"
-        )
-        response = await client.get(api_url, timeout=8.0)
-        response.raise_for_status()
-        data = response.json()
-        server_url = data.get("server_url")
-        remote_version = data.get("remote_version")
-        latest_release_version = data.get("latest_release_version")
-        if server_url and remote_version and latest_release_version:
-            _VERSION_CONFIG_CACHE = (latest_release_version, remote_version, server_url)
-            _VERSION_CONFIG_CACHE_TIME = now
-            return _VERSION_CONFIG_CACHE
-    except Exception:
-        if _VERSION_CONFIG_CACHE:
-            return _VERSION_CONFIG_CACHE
-    return None
 
+# ==================== OAUTH ====================
 async def get_access_token(uid, password):
-    url = "https://100067.connect.garena.com/oauth/guest/token/grant"
+    url = "https://ffmconnect.live.gop.garenanow.com/oauth/guest/token/grant"
     hdrs = {
-        "Host": "100067.connect.garena.com",
-        "User-Agent": "Dalvik/2.1.0 (Linux; U; Android 12; SM-G998B Build/SP1A.210812.016)",
+        "User-Agent": "UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)",
+        "Connection": "Keep-Alive",
+        "Accept-Encoding": "gzip",
         "Content-Type": "application/x-www-form-urlencoded",
-        "Accept-Encoding": "gzip, deflate, br",
-        "Connection": "close"
     }
-    data = {
-        "uid": uid,
-        "password": password,
-        "response_type": "token",
-        "client_type": "2",
-        "client_secret": "2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3",
-        "client_id": "100067"
-    }
+    data = (
+        f"uid={uid}&password={password}"
+        "&response_type=token&client_type=2"
+        "&client_secret=2ee44819e9b4598845141067b281621874d0d5d7af9d8f7e00c1e54715b7d1e3"
+        "&client_id=100067"
+    )
     for attempt in range(5):
         try:
-            response = await client.post(url, headers=hdrs, data=data)
+            response = await client.post(url, headers=hdrs, content=data)
             if response.status_code == 200:
-                response_data = response.json()
-                open_id = response_data.get("open_id")
-                access_token = response_data.get("access_token")
-                platform = response_data.get("platform", 4)
+                j = response.json()
+                open_id      = j.get("open_id")
+                access_token = j.get("access_token")
+                platform     = j.get("platform", 4)
                 if open_id and access_token:
                     return open_id, access_token, platform
             if response.status_code == 429:
@@ -812,6 +716,8 @@ async def get_access_token(uid, password):
         await asyncio.sleep(0.5)
     return None
 
+
+# ==================== PROTOBUF HELPERS ====================
 async def parse_results(parsed_results):
     result_dict = {}
     for result in parsed_results:
@@ -837,169 +743,152 @@ async def decode_protobuf(data):
     parsed_results_dict = await parse_results(parsed_results)
     return json.dumps(parsed_results_dict)
 
+
+# ==================== MAJOR LOGIN PAYLOAD (SMALL LoginReq) ====================
 async def build_majorlogin_payload(open_id, access_token, platform, client_version, device_info):
+    """
+    app.py style — SMALL LoginReq (4 fields only).
+    device_info is IGNORED (server rejects extra fields on MajorLogin).
+    """
     try:
-        proto = thunderFF_pb2.MajorLoginReq()
-        proto.event_time = str(datetime.now())[:-7]
-        proto.game_name = "free fire"
-        proto.platform_id = 1 if str(platform) in ["1", "4"] else int(platform)
-        proto.client_version = client_version
-        proto.client_version_code = "2019121229"
-        
-        # --- INJECTING PERSISTENT DYNAMIC DEVICE DATA ---
-        proto.system_software = device_info.get("system_software", "Android OS 12 / API-31 (SP1A.210812.016.C2/user.dxu.20260701.180839)")
-        proto.system_hardware = device_info.get("brand", "Handheld")
-        proto.device_type = device_info.get("model", "Handheld")
-        proto.screen_width = int(device_info.get("screen_width", 1600))
-        proto.screen_height = int(device_info.get("screen_height", 900))
-        proto.screen_dpi = str(device_info.get("screen_dpi", "300"))
-        proto.processor_details = device_info.get("processor_details", "x86-64 SSE3 SSE4.1 SSE4.2 AVX | 2400 | 4")
-        proto.memory = int(device_info.get("memory", 5951))
-        proto.gpu_renderer = device_info.get("gpu_renderer", "Adreno (TM) 640")
-        proto.unique_device_id = device_info.get("unique_device_id", "Google|725030d8-6585-4f55-bcca-a6df7e59935b")
-        proto.client_ip = device_info.get("client_ip", "103.145.112.210")
-        # ------------------------------------------------
-        
-        proto.telecom_operator = "Citycell"
-        proto.network_operator_a = "Citycell"
-        proto.network_type = "WIFI"
-        proto.network_type_a = "WIFI"
-        proto.cpu_type = 2
-        proto.cpu_architecture = "64"
-        proto.gpu_version = "OpenGL ES 3.2"
-        proto.graphics_api = "OpenGLES2"
-        proto.language = "en"
-        proto.open_id = open_id
+        proto = LoginReq()
+        proto.open_id = str(open_id)
         proto.open_id_type = str(platform)
-        proto.login_open_id_type = int(platform)
-        proto.access_token = access_token
-        proto.login_by = 3
-        proto.platform_sdk_id = 2
-        proto.origin_platform_type = str(platform)
-        proto.primary_platform_type = str(platform)
-        proto.reg_avatar = 1
-        proto.channel_type = 3
-        
-        memory_available = proto.memory_available
-        memory_available.version = 55
-        memory_available.hidden_value = 81
-        
-        proto.external_storage_total = 34308
-        proto.external_storage_available = 30777
-        proto.internal_storage_total = 2519
-        proto.internal_storage_available = 243
-        proto.game_disk_storage_total = 34308
-        proto.game_disk_storage_available = 32224
-        proto.external_sdcard_total_storage = 34308
-        proto.external_sdcard_avail_storage = 32224
-        
-        proto.library_path = "/data/app/~~UKDdGuy32C5yOa0KZe_ROA==/com.dts.freefireth-UAKF1gjDbXSGfpA07JDTKQ==/lib/arm64"
-        proto.library_token = "b8e0cd5e295eee42f5860d3c86e483dd|/data/app/~~UKDdGuy32C5yOa0KZe_ROA==/com.dts.freefireth-UAKF1gjDbXSGfpA07JDTKQ==/base.apk"
-        proto.client_using_version = "7428b253defc164018c604a1ebbfebdf"
-        proto.supported_astc_bitset = 4095
-        proto.analytics_detail = b"FwQVTgUPX1UaUllDDwcWCRBpWAUOUgsvA1snWlBaO1kFYg=="
-        proto.loading_time = 14582
-        proto.release_channel = "android"
-        proto.extra_info = "KqsHT4tDHGqm9PQ3syB24XA4N6SWy/Q/HfMFTQM+SgxmVqsgPK138ajtCFyVNW/Q7p6hxoenpRjeZ2NphiIosCZ3YDkONB5NAa+zTwNo7iabx/mj"
-        proto.android_engine_init_flag = 111207
-        proto.if_push = 1
-        proto.is_vpn = 0
-        
+        proto.login_token = str(access_token)
+        proto.orign_platform_type = str(platform)
+
         payload = proto.SerializeToString()
+        print(f"  [PAYLOAD] Small LoginReq built: {len(payload)} bytes (open_id={open_id[:10]}...)")
         return await aes_encrypt(payload, AES_KEY, AES_IV)
-    except Exception:
+    except Exception as e:
+        import traceback
+        print_error(f"build_majorlogin_payload error: {type(e).__name__}: {e}")
+        traceback.print_exc()
         return None
 
+
+# ==================== MAJOR LOGIN (with retry + URL fallback) ====================
 async def send_majorlogin(data, release_version, server_url):
-    try:
-        url = f"{server_url}MajorLogin"
-        req_headers = headers.copy()
-        req_headers["ReleaseVersion"] = release_version
-        response = await client.post(url, headers=req_headers, data=data)
-        if response.status_code != 200:
-            return None
-        response_content = response.content
-        if len(response_content) < 40:
-            return None
+    urls_to_try = [server_url.rstrip('/')]
+    for u in LOGIN_URLS:
+        clean = u.rstrip('/')
+        if clean not in urls_to_try:
+            urls_to_try.append(clean)
 
-        # 1. Direct parse
-        res_proto = thunderFF_pb2.MajorLoginRes()
-        try:
-            res_proto.ParseFromString(response_content)
-            if res_proto.region and res_proto.token:
-                return res_proto
-        except Exception:
-            pass
-
-        # 2. OB55 64-byte header offset check
-        if len(response_content) > 64:
+    for base_url in urls_to_try:
+        url = f"{base_url}/MajorLogin"
+        for attempt in range(3):
             try:
-                res_proto = thunderFF_pb2.MajorLoginRes()
-                res_proto.ParseFromString(response_content[64:])
-                if res_proto.region and res_proto.token:
-                    return res_proto
-            except Exception:
-                pass
+                req_headers = {
+                    'User-Agent': 'UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)',
+                    'Accept': '*/*',
+                    'Accept-Encoding': 'deflate, gzip',
+                    'X-Ga-Sv': '1789535859',
+                    'Authorization': 'Bearer',
+                    'X-Ga': 'v1 1',
+                    'Releaseversion': release_version,
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'X-Unity-Version': '2018.4.12f1',
+                    'PlAy_VeR': CLIENT_VERSION,
+                    'Ob_VeR': release_version,
+                }
+                response = await client.post(url, headers=req_headers, data=data)
+                print(f"  [MAJORLOGIN] {base_url} → HTTP {response.status_code} | len={len(response.content)}")
 
-        # 3. Dynamic offset search for OB55 compatibility
-        for offset in range(min(128, len(response_content))):
-            try:
-                candidate = thunderFF_pb2.MajorLoginRes()
-                candidate.ParseFromString(response_content[offset:])
-                if candidate.region and candidate.token:
-                    return candidate
-            except Exception:
-                pass
+                if response.status_code in (404,) or response.status_code >= 500:
+                    await asyncio.sleep(0.5)
+                    continue
+                if response.status_code != 200:
+                    break
 
-        res_proto = thunderFF_pb2.MajorLoginRes()
-        res_proto.ParseFromString(response_content)
-        return res_proto
-    except Exception:
-        return None
+                response_content = response.content
+                if len(response_content) < 40:
+                    break
 
-async def send_getlogin(data, base_url, token, release_version):
-    try:
-        url = f"{base_url.rstrip('/')}/GetLoginData"
-        req_headers = headers.copy()
-        req_headers["ReleaseVersion"] = release_version
-        req_headers['Authorization'] = f"Bearer {token}"
-        req_headers['Host'] = "clientbp.ppmainecoonghj.com"
-        response = await client.post(url, headers=req_headers, data=data)
-        if response.status_code != 200:
-            return None
-        response_content = response.content
-
-        res_proto = thunderFF_pb2.GetLoginDataRes()
-        parsed_successfully = False
-        try:
-            res_proto.ParseFromString(response_content)
-            if res_proto.functional_addrs or res_proto.informational_addrs:
-                parsed_successfully = True
-        except Exception:
-            pass
-
-        if not parsed_successfully:
-            for offset in range(min(128, len(response_content))):
-                try:
-                    candidate = thunderFF_pb2.GetLoginDataRes()
-                    candidate.ParseFromString(response_content[offset:])
-                    if candidate.functional_addrs or candidate.informational_addrs:
-                        res_proto = candidate
+                offsets = [0, 64] + list(range(1, 128))
+                for offset in offsets:
+                    if offset >= len(response_content):
                         break
-                except Exception:
-                    pass
+                    try:
+                        res_proto = thunderFF_pb2.MajorLoginRes()
+                        res_proto.ParseFromString(response_content[offset:])
+                        if res_proto.region and res_proto.token:
+                            print(f"  [MAJORLOGIN] ✓ Success via {base_url} (offset={offset})")
+                            return res_proto
+                    except Exception:
+                        continue
+                break
+            except Exception as e:
+                print(f"  [MAJORLOGIN] {base_url} exception: {e}")
+                await asyncio.sleep(0.5)
+                continue
 
-        dict_res = {}
+    print_error("  [MAJORLOGIN] All URLs failed")
+    return None
+
+
+# ==================== GET LOGIN DATA ====================
+async def send_getlogin(data, base_url, token, release_version):
+    url = f"{CLIENT_BASE}GetLoginData"
+    for attempt in range(3):
         try:
-            parsed = Parser().parse(response_content.hex())
-            dict_res = await parse_results(parsed)
-        except Exception:
-            pass
+            req_headers = {
+                'User-Agent': 'UnityPlayer/2018.4.12f1 (UnityWebRequest/1.0, libcurl/8.5.0-DEV)',
+                'Accept': '*/*',
+                'Accept-Encoding': 'deflate, gzip',
+                'X-Ga-Sv': '1789535859',
+                'Authorization': f'Bearer {token}',
+                'X-Ga': 'v1 1',
+                'Releaseversion': release_version,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-Unity-Version': '2018.4.12f1',
+                'PlAy_VeR': CLIENT_VERSION,
+                'Ob_VeR': release_version,
+                'Host': 'client.ind.freefiremobile.com',
+            }
+            response = await client.post(url, headers=req_headers, data=data)
+            print(f"  [GETLOGIN] HTTP {response.status_code} | len={len(response.content)}")
 
-        return res_proto, dict_res
-    except Exception:
-        return None
+            if response.status_code != 200:
+                await asyncio.sleep(0.5)
+                continue
 
+            response_content = response.content
+            res_proto = thunderFF_pb2.GetLoginDataRes()
+            parsed_successfully = False
+            try:
+                res_proto.ParseFromString(response_content)
+                if res_proto.functional_addrs or res_proto.informational_addrs:
+                    parsed_successfully = True
+            except Exception:
+                pass
+
+            if not parsed_successfully:
+                for offset in range(min(128, len(response_content))):
+                    try:
+                        candidate = thunderFF_pb2.GetLoginDataRes()
+                        candidate.ParseFromString(response_content[offset:])
+                        if candidate.functional_addrs or candidate.informational_addrs:
+                            res_proto = candidate
+                            break
+                    except Exception:
+                        pass
+
+            dict_res = {}
+            try:
+                parsed = Parser().parse(response_content.hex())
+                dict_res = await parse_results(parsed)
+            except Exception:
+                pass
+
+            return res_proto, dict_res
+        except Exception as e:
+            print(f"  [GETLOGIN] exception: {e}")
+            await asyncio.sleep(0.5)
+    return None
+
+
+# ==================== TCP STARTUP PACKET ====================
 async def build_tcp_startup_packet(account_id, token, server_time, key, iv, region="BD", typ='OnLine'):
     uid_hex = f"{int(account_id):016x}"
     timestamp_hex = f"{int(server_time):08x}"
@@ -1010,12 +899,11 @@ async def build_tcp_startup_packet(account_id, token, server_time, key, iv, regi
     if typ == 'OnLine':
         prefix = '7219' if reg == 'BD' else ('7214' if reg == 'IND' else '7215')
         return f"{prefix}{uid_hex}{timestamp_hex}00000000{encrypted_packet_length}{encrypted_packet}"
-    else:  # ChaT / Informational
+    else:
         prefix = '8119' if reg == 'BD' else ('8114' if reg == 'IND' else '8115')
         return f"{prefix}{uid_hex}{timestamp_hex}{encrypted_packet_length}{encrypted_packet}"
 
 async def send_keep_alive(region="BD"):
-    """Send 2-byte keep-alive pulse to maintain connection in OB55"""
     try:
         reg = str(region).upper() if region else "BD"
         ka_hex = "0219" if reg == "BD" else ("0214" if reg == "IND" else "0215")
@@ -1024,6 +912,7 @@ async def send_keep_alive(region="BD"):
         return bytes.fromhex("0219")
 
 
+# ==================== BATTLE ROYALE START ====================
 async def start_game_battle_royale(region, client_version, writer, key, iv):
     packet = bytes.fromhex("080112800a0a010110013a110a044944433110aa011a064555524f50453a100a044944433210311a064555524f504540014a0801090a0b1219202758016291090a8001303838463832424630324139363736373032303130313030303030303030303030303136303030313030313530303032323246393745454530463030303030303436373632353134303030303030303030303030303030303030303030303030303030303030303030303030303066663030303030303030636163666131366410241afb02735d5e571400024a775d45414d1a041b1c001f11010449715f4243481a001e1d071c1703004b1a4066785c524570735c51486775421b5c5a4c07504042685a63610816054e19025e75196001477c015165406370195f5547404e4550640103020f1304064863754268676c755f65576e40467e5f0a417a4701026d675d6e73670b1108495a4c6a0b78470b740065645e525a057258425f584a447d4e6759440c11044e7c596d7f4b625f7d04055a47505c4e1d6b5b4107447d7201057d7f0f14084e430457674f7e517d72015172415d027473577c4d615f79535256780911030f4d5e027a797f614165067806505d53777750475e75064257076500460817014e741e7e5078487e7a7c465e7669767153497064605a7376677773550d160148037e18675966787f4c42607a645f577e7b441b460776026b18685d0b110205490060020f70676175654674706671797f41067346677c4e06585e780f15074c57047b40517075415f6364027259674b5b0166407f7340600407770a22047a5d5c52300b3a0a167305067162727516134208312e3133302e3232480350015ae90403626253513635686e556f4e36416456324b796f566c636f477776484f624e56526c4d727073504b4f43654177616848494176795556497273743752737149734a7a786b3247525268377a2f637664626d504f6a73552f79626d38547a4c69586d2f474351696d494b53486833447955726f39515152756c34545350626d6d624b7949565937545671577059455372323646572f59624578507338514f706d317372785455736c30796a434144444d4f34616a654b615753366361496c554b4963797a494e396d52516f715277687939797257476d337a644345337a6a61436f492f5a585233656f65365a42647a64677654636b6b665733356e4d4c6a6a565072564b6433523172756174394e50514150724a5546627859696c4c5a3859707336654d5447666b6649793574666a526c314d4648706b51774c6373374439656378566c41636f374e664f6d2b30654756466c4434744478706771385533595973587645384842502f70666c767a737138316a32524f4d7857437556445442492f684735625462773166456e4249725162762b636144775147696f74554e316d4c4b77734379456f4766706746614251457645672b736a764c4c78704743334c304a5344532f74526169504354553344374e6249306547516651622f5a466f4c36455630775a324d6f583932414c572f5049752f56634663584e70596b356f7966326151416a536971486a2f363276354843644f525551303578754e6171795251625653704654303137655237675255636b4966366c6f447476342b514e4a4670766d74757077707774396a5a5974437a4b56743657726d6e36785837706658456251555434684f3758a201050803108703a201050804108103a20105080510c001a20105081d10cc01a2010408161078a20105080e10af01a201020815")
     proto = thunderFF_pb2.StartMatch()
@@ -1046,6 +935,8 @@ async def start_game_battle_royale(region, client_version, writer, key, iv):
     await writer.drain()
     print_info(f"[⚔] Battle Royale Match Search Packet Sent ({packet_length} bytes, prefix: {reg_prefix}) | Region: {reg}")
 
+
+# ==================== LONE WOLF START ====================
 async def start_game_lone_wolf(region, client_version, writer, key, iv):
     packet = bytes.fromhex("080112800a0a010b102b3a110a044944433110aa011a064555524f50453a100a044944433210311a064555524f504540014a0801090a0b1219202758016291090a8001303838463832424630324139363736373032303130313030303030303030303030303136303030313030313530303032323246393745454530463030303030303436373632353134303030303030303030303030303030303030303030303030303030303030303030303030303066663030303030303030636163666131366410241afb02735d5e571400024a775d45414d1a041b1c001f11010449715f4243481a001e1d071c1703004b1a4066785c524570735c51486775421b5c5a4c07504042685a63610816054e19025e75196001477c015165406370195f5547404e4550640103020f1304064863754268676c755f65576e40467e5f0a417a4701026d675d6e73670b1108495a4c6a0b78470b740065645e525a057258425f584a447d4e6759440c11044e7c596d7f4b625f7d04055a47505c4e1d6b5b4107447d7201057d7f0f14084e430457674f7e517d72015172415d027473577c4d615f79535256780911030f4d5e027a797f614165067806505d53777750475e75064257076500460817014e741e7e5078487e7a7c465e7669767153497064605a7376677773550d160148037e18675966787f4c42607a645f577e7b441b460776026b18685d0b110205490060020f70676175654674706671797f41067346677c4e06585e780f15074c57047b40517075415f6364027259674b5b0166407f7340600407770a22047a5d5c52300b3a0a167305067162727516134208312e3133302e3232480350015ae90403626253513635686e556f4e36416456324b796f566c636f477776484f624e56526c4d727073504b4f43654177616848494176795556497273743752737149734a7a786b3247525268377a2f637664626d504f6a73552f79626d38547a4c69586d2f474351696d494b53486833447955726f39515152756c34545350626d6d624b7949565937545671577059455372323646572f59624578507338514f706d317372785455736c30796a434144444d4f34616a654b615753366361496c554b4963797a494e396d52516f715277687939797257476d337a644345337a6a61436f492f5a585233656f65365a42647a64677654636b6b665733356e4d4c6a6a565072564b6433523172756174394e50514150724a5546627859696c4c5a3859707336654d5447666b6649793574666a526c314d4648706b51774c6373374439656378566c41636f374e664f6d2b30654756466c4434744478706771385533595973587645384842502f70666c767a737138316a32524f4d7857437556445442492f684735625462773166456e4249725162762b636144775147696f74554e316d4c4b77734379456f4766706746614251457645672b736a764c4c78704743334c304a5344532f74526169504354553344374e6249306547516651622f5a466f4c36455630775a324d6f583932414c572f5049752f56634663584e70596b356f7966326151416a536971486a2f363276354843644f525551303578754e6171795251625653704654303137655237675255636b4966366c6f447476342b514e4a4670766d74757077707774396a5a5974437a4b56743657726d6e36785837706658456251555434684f3758a201050803108703a201050804108103a20105080510c001a20105081d10cc01a2010408161078a20105080e10af01a201020815")
     proto = thunderFF_pb2.StartMatch()
@@ -1068,6 +959,8 @@ async def start_game_lone_wolf(region, client_version, writer, key, iv):
     await writer.drain()
     print_info(f"[🐺] Lone Wolf Match Search Packet Sent ({packet_length} bytes, prefix: {reg_prefix}) | Region: {reg}")
 
+
+# ==================== TEA / CRC / PACKET BUILDERS ====================
 async def has_ssan_zig(n):
     z = (n << 1) & 0xFFFFFFFFFFFFFFFF
     out = bytearray()
@@ -1167,15 +1060,16 @@ async def sv_frame(msg_key, layout, send_option, cmd, order_id, flags, content, 
     packet[1] = await crc7_buff(0, bytes(packet[2:])) & 0x7F
     return bytes(packet)
 
+
+# ==================== MATCH STARTUP PACKETS ====================
 async def build_match_startup_packets(token, udp_key, match_code, account_id, block_val,
-                                      server_ip="", region="BD", client_version="1.132.6",
+                                      server_ip="", region="BD", client_version="1.132.9",
                                       client_version_code="2019121229", access_token="",
                                       mode="BR"):
     token = token.strip()
     udp_key = bytes.fromhex(udp_key)
     match_code = [int(ch) for ch in str(match_code).strip()]
 
-    # OB55 splits JWT match token at 660 bytes
     thunder_jwt = token[:660] if len(token) > 660 else token
     sharma_jwt = token[660:] if len(token) > 660 else ""
     encoded_thunder_jwt = thunder_jwt.encode() if isinstance(thunder_jwt, str) else thunder_jwt
@@ -1184,8 +1078,7 @@ async def build_match_startup_packets(token, udp_key, match_code, account_id, bl
     garena420 = await has_ssan_zig(len(encoded_thunder_jwt)) + encoded_thunder_jwt
 
     reg = str(region).upper() if region else "BD"
-    
-    # Mode-dependent Sharma packet payload
+
     if mode == "BR":
         csoversea_block = bytes.fromhex(
             "ca0163736f7665727365612e7374726f6e67686f6c642e66726565666972656d6f62696c652e636f6d"
@@ -1195,7 +1088,7 @@ async def build_match_startup_packets(token, udp_key, match_code, account_id, bl
         )
         m_val1 = 1
         m_val2 = 1
-    else:  # LONE_WOLF
+    else:
         csoversea_block = bytes.fromhex(
             "ca0163736f7665727365612e7374726f6e67686f6c642e66726565666972656d6f62696c652e636f6d"
             "3b302e302e302e303b33342e3132362e37362e34353b33342e38372e3137372e31343b33342e38372e"
@@ -1234,6 +1127,8 @@ async def build_match_startup_packets(token, udp_key, match_code, account_id, bl
     loading = await sv_frame(0x5A, match_code, 2, 448, 1, 1, tg_garena420, udp_key)
     return process.hex(), loading.hex()
 
+
+# ==================== UDP / PACKET HELPERS ====================
 async def produce_xor_key(secret_key):
     k = secret_key[0] if secret_key and len(secret_key) > 0 else 10
     return k, ((k << 8) | k) & 0xFFFF
@@ -1427,8 +1322,11 @@ async def decode_packet(packet, key, mask=None):
     return candidates[0]
 
 
+
+
+
 # ============================================================
-# play_game — UDP MATCH (FIXED & DNS OPTIMIZED)
+# play_game — UDP MATCH
 # ============================================================
 async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
                     account_id, player_region, client_version, key, iv,
@@ -1470,7 +1368,6 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
             keepalive_ping(sock, resolved_ip, port, udp_key_bytes, match_code, ping_stop)
         )
 
-        # ANTI-AFK task — movement + fire simulation
         if ANTI_AFK_ENABLED:
             anti_afk_task = asyncio.create_task(
                 anti_afk_worker(
@@ -1646,8 +1543,9 @@ async def play_game(server_ip_port, thunder, sharma, udp_key, match_code,
         except Exception:
             pass
 
+
 # ============================================================
-# 🔥 functional_lone_wolf — TRUE Parallel + Smart Cache + DNS
+# functional_lone_wolf
 # ============================================================
 async def functional_lone_wolf(addrs, starter_packet, account_region, client_version,
                                 key, iv, account_id="", account_data=None,
@@ -1659,7 +1557,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
     search_attempts = 0
     last_start_time = 0.0
     uid_str = str(account_id)
-
     consecutive_parse_failures = 0
 
     current_token = starter_packet
@@ -1676,7 +1573,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
     try:
         while True:
-            # Check pause status before establishing TCP connection
             while bot_state.is_paused(uid_str):
                 try:
                     bot_state.update_status(uid_str, "PAUSED", 0)
@@ -1684,7 +1580,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     pass
                 await asyncio.sleep(1.0)
 
-            # If already at max concurrent matches, wait for an active match to complete
             while True:
                 play_matches[:] = [m for m in play_matches if not m.done()]
                 if len(play_matches) < MAX_CONCURRENT_MATCHES:
@@ -1692,6 +1587,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 await asyncio.sleep(1.0)
 
             writer = None
+            gateway_ping_task = None
             try:
                 if current_account_data:
                     fresh = None
@@ -1714,7 +1610,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             typ='OnLine'
                         )
                     else:
-                        print_warning(f"[FUNCTIONAL] Cache miss for {uid_str} → re-login needed")
+                        print_warning(f"[FUNCTIONAL] Cache miss for {uid_str} -> re-login needed")
                         try:
                             if current_account_data.get('auth_uid'):
                                 cache_invalidate(str(current_account_data['auth_uid']))
@@ -1735,7 +1631,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 writer.write(bytes.fromhex(current_token))
                 await writer.drain()
 
-                # Send initial keepalive pulse right after connecting in OB55
                 try:
                     init_ka = await send_keep_alive(account_region)
                     if init_ka and writer and not writer.is_closing():
@@ -1744,7 +1639,6 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                 except Exception:
                     pass
 
-                # Persistent Gateway Keepalive task to maintain TCP connection in OB55
                 async def func_gateway_keepalive():
                     ka_bytes = await send_keep_alive(account_region)
                     while True:
@@ -1771,13 +1665,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     try:
                         await asyncio.sleep(random.uniform(0.2, 0.4))
                         if cur_mode == "BR":
-                            print_info(f"[⚔] Account Level {cur_lvl} (< 3) → Searching for Battle Royale Match... | UID: {uid_str} | Attempt #{search_attempts}")
+                            print_info(f"[⚔] Account Level {cur_lvl} (< 3) -> Searching for Battle Royale Match... | UID: {uid_str} | Attempt #{search_attempts}")
                             await start_game_battle_royale(
                                 current_region, client_version, writer,
                                 current_key, current_iv
                             )
                         else:
-                            print_info(f"[🐺] Account Level {cur_lvl} (>= 3) → Searching for Lone Wolf Match... | UID: {uid_str} | Attempt #{search_attempts}")
+                            print_info(f"[🐺] Account Level {cur_lvl} (>= 3) -> Searching for Lone Wolf Match... | UID: {uid_str} | Attempt #{search_attempts}")
                             await start_game_lone_wolf(
                                 current_region, client_version, writer,
                                 current_key, current_iv
@@ -1805,7 +1699,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                             pass
                         print_warning(f"[⏸] UID {uid_str} PAUSED. Closing TCP gateway socket...")
                         bot_state.unregister_writer(uid_str, writer)
-                        if 'gateway_ping_task' in locals() and gateway_ping_task:
+                        if gateway_ping_task:
                             gateway_ping_task.cancel()
                         await safe_close_writer(writer)
                         writer = None
@@ -1819,11 +1713,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     cur_mode, cur_lvl = get_current_mode()
                     current_status = f"IN_MATCH ({cur_mode})" if (active_count > 0 or has_active_match) else f"ONLINE ({cur_mode})"
                     try:
-                        bot_state.update_status(
-                            uid_str,
-                            current_status,
-                            active_count
-                        )
+                        bot_state.update_status(uid_str, current_status, active_count)
                     except Exception:
                         pass
 
@@ -1831,15 +1721,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                     play_matches[:] = [m for m in play_matches if not m.done()]
                     has_active_match = any(not m.done() for m in play_matches)
                     cur_mode, cur_lvl = get_current_mode()
-                    
-                    # 🔥 BR + LONE_WOLF dono parallel (level ke hisaab se)
+
                     if len(play_matches) < MAX_CONCURRENT_MATCHES and (now - last_start_time >= START_MATCH_INTERVAL):
                         await send_start_match()
                         if len(play_matches) < MAX_CONCURRENT_MATCHES - 1:
                             await asyncio.sleep(0.5)
                             await send_start_match()
 
-                         
                     try:
                         data = await asyncio.wait_for(reader.read(8192), timeout=0.5)
                     except asyncio.TimeoutError:
@@ -1908,10 +1796,10 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                                 match_index = await _inc_match(uid_str)
                                 print_info(
-                                    f"[⚔] Match #{match_index} Injected [{cur_mode}] → {server_ip_port} (UID: {uid_str})"
+                                    f"[⚔] Match #{match_index} Injected [{cur_mode}] -> {server_ip_port} (UID: {uid_str})"
                                 )
                                 try:
-                                    bot_state.increment_match_started()      # 🔥 Counter badhao
+                                    bot_state.increment_match_started()
                                 except Exception:
                                     pass
 
@@ -1936,8 +1824,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                                 print_success(
                                     f"[✓] Match #{match_index} Injected & Running in Background | Active Matches: {len(play_matches)} | UID: {uid_str}"
                                 )
-                                
-                                # 🔥 BR aur LONE_WOLF dono parallel — 5 matches tak
+
                                 await safe_close_writer(writer)
                                 await asyncio.sleep(NEW_MATCH_DELAY)
                                 reconnects = 0
@@ -1955,13 +1842,13 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
                         continue
 
             except asyncio.CancelledError:
-                if 'gateway_ping_task' in locals() and gateway_ping_task:
+                if gateway_ping_task:
                     gateway_ping_task.cancel()
                 if writer:
                     bot_state.unregister_writer(uid_str, writer)
                 raise
             except Exception as e:
-                if 'gateway_ping_task' in locals() and gateway_ping_task:
+                if gateway_ping_task:
                     gateway_ping_task.cancel()
                 if writer:
                     bot_state.unregister_writer(uid_str, writer)
@@ -1988,7 +1875,7 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
 
                 await asyncio.sleep(min(reconnects * 0.5, 2.0))
             finally:
-                if 'gateway_ping_task' in locals() and gateway_ping_task:
+                if gateway_ping_task:
                     gateway_ping_task.cancel()
                 if writer:
                     bot_state.unregister_writer(uid_str, writer)
@@ -2001,6 +1888,10 @@ async def functional_lone_wolf(addrs, starter_packet, account_region, client_ver
             if not m.done():
                 m.cancel()
 
+
+# ============================================================
+# informational — TCP keepalive for chat server
+# ============================================================
 async def informational(addrs, starter_packet, key, iv, region="BD", account_id="", max_reconnects=3):
     uid_str = str(account_id)
     reconnects = 0
@@ -2016,16 +1907,15 @@ async def informational(addrs, starter_packet, key, iv, region="BD", account_id=
             reader, writer = await asyncio.open_connection(resolved_ip, int(port))
             if uid_str:
                 bot_state.register_writer(uid_str, writer)
-            
+
             raw_sock = writer.get_extra_info('socket')
             if raw_sock:
                 optimize_tcp_socket(raw_sock)
-                
+
             writer.write(bytes.fromhex(starter_packet))
             await writer.drain()
             reconnects = 0
 
-            # Initial keepalive right after connecting
             try:
                 init_ka = await send_keep_alive(region)
                 if init_ka and writer and not writer.is_closing():
@@ -2087,9 +1977,7 @@ async def informational(addrs, starter_packet, key, iv, region="BD", account_id=
                 await asyncio.sleep(1)
 
 
-
 # ==================== ACCOUNT PROCESSORS ====================
-
 def _register_credentials(account_data: Dict):
     try:
         acc_id = str(account_data['account_id'])
@@ -2145,9 +2033,8 @@ async def refresh_account_profile(account_data_or_uid: Any):
                 bot_state.accounts[acc_id]["likes"] = likes
             if nickname and acc_id in bot_state.accounts:
                 bot_state.accounts[acc_id]["nickname"] = nickname
-    except Exception as e:
+    except Exception:
         pass
-
 
 
 async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
@@ -2175,18 +2062,15 @@ async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
     try:
         async with _LOGIN_SEMAPHORE:
             verconfig_res = await version_config()
-            if verconfig_res is None:
-                return None
             release_version, client_version, server_url = verconfig_res
-            
+
             tokengrant_response = await get_access_token(uid, password)
             if tokengrant_response is None:
                 return None
             open_id, access_token, platform = tokengrant_response
-            
-            # 🔥 1ta id 1ta Device Injection
+
             device_info = get_device_for_account(uid)
-            
+
             login_payload_data = await build_majorlogin_payload(open_id, access_token, platform, client_version, device_info)
             majorlogin_response = await send_majorlogin(login_payload_data, release_version, server_url)
             if majorlogin_response is None:
@@ -2234,7 +2118,9 @@ async def process_account_uid_pass(uid: str, password: str) -> Optional[Dict]:
         cache_set(uid, account_data)
         return account_data
     except Exception as e:
-        print_error(f"process_account_uid_pass error: {e}")
+        import traceback
+        print_error(f"process_account_uid_pass error: {type(e).__name__}: {e}")
+        traceback.print_exc()
         return None
 
 
@@ -2259,13 +2145,10 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
         _register_credentials(cached)
         return cached
 
-
     print_info("[LOGIN] Full login with Access Token...")
     try:
         async with _LOGIN_SEMAPHORE:
             verconfig_res = await version_config()
-            if verconfig_res is None:
-                return None
             release_version, client_version, server_url = verconfig_res
 
             url = f"https://100067.connect.garena.com/oauth/token/inspect?token={access_token}"
@@ -2286,11 +2169,9 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
 
             open_id = data.get('open_id')
             platform = data.get('platform', 4)
-
             if not open_id:
                 return None
 
-            # 🔥 1ta id 1ta Device Injection (using unique open_id as the key)
             device_info = get_device_for_account(open_id)
 
             login_payload_data = await build_majorlogin_payload(open_id, access_token, str(platform), client_version, device_info)
@@ -2311,6 +2192,7 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
                 return None
 
             res_proto, dict_res = getlogin_result
+
         acc_id = str(majorlogin_response.account_id)
         level = int(get_proto_field(dict_res, 6, 1))
         exp = int(get_proto_field(dict_res, 7, 0))
@@ -2349,7 +2231,9 @@ async def process_account_token(access_token: str) -> Optional[Dict]:
         cache_set(cache_key, account_data)
         return account_data
     except Exception as e:
-        print_error(f"process_account_token error: {e}")
+        import traceback
+        print_error(f"process_account_token error: {type(e).__name__}: {e}")
+        traceback.print_exc()
         return None
 
 
@@ -2493,12 +2377,11 @@ async def account_loop_token(token: str):
             await asyncio.sleep(3)
         except asyncio.CancelledError:
             break
-        except Exception as e:
+        except Exception:
             await asyncio.sleep(8)
 
 
 # ==================== ACCOUNTS LOADER ====================
-
 def load_accounts():
     accounts = []
     if os.path.exists(ACCOUNTS_FILE):
@@ -2517,7 +2400,6 @@ def load_accounts():
 
 
 # ==================== MAIN ====================
-
 async def main():
     print_colored("╔════════════════════════════════════════════════════════════╗", Colors.CYAN)
     print_colored("║⚡@PREX AUTO LEVEL UP BOT (BR Lvl 2 -> Lone Wolf Lvl 3+)⚡ ║", Colors.CYAN)
@@ -2591,7 +2473,6 @@ async def main():
     bot_state.refresh_callbacks["on_restart_account"] = on_restart_account_handler
     bot_state.refresh_callbacks["on_pause_toggle"] = on_pause_toggle_handler
 
-    # Strict 1-to-1 sync of devices with accounts at startup
     sync_devices_with_accounts()
 
     accounts = load_accounts()
@@ -2611,7 +2492,6 @@ async def main():
             t = asyncio.create_task(account_loop_guest(u, acc["password"]))
             bot_state.account_workers[u] = t
 
-        # Stagger startup to prevent thundering herd when launching many accounts (e.g. 45 IDs)
         if idx < len(accounts) - 1:
             await asyncio.sleep(0.35)
 
@@ -2624,7 +2504,6 @@ async def main():
             t.cancel()
         await asyncio.gather(*bot_state.account_workers.values(), return_exceptions=True)
         print_success("All sessions cleanly closed.")
-
 
 
 if __name__ == "__main__":
