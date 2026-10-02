@@ -1,41 +1,28 @@
 {
-    "7961161357": {
-        "unique_device_id": "Google|91adad75-91ef-404b-9665-6f5359703d59",
-        "brand": "Xiaomi",
-        "model": "2201122G",
-        "gpu_renderer": "Adreno (TM) 730",
-        "system_software": "Android OS 13 / API-33",
-        "screen_width": 720,
-        "screen_height": 1600,
-        "screen_dpi": "316",
-        "memory": 5432,
-        "processor_details": "ARM64 FP ASIMD AES VMH | 2599 | 10",
-        "client_ip": "176.227.53.135"
-    },
-    "7961179620": {
-        "unique_device_id": "Google|f9bb7aa7-8bbe-4c5d-aca4-c072eb0d5376",
+    "1acea49bfe5496a4": {
+        "unique_device_id": "Google|3974332b-0fe3-4a8d-8967-87f35b5b0827",
         "brand": "Vivo",
         "model": "V2203",
         "gpu_renderer": "Mali-G710",
         "system_software": "Android OS 12 / API-31",
-        "screen_width": 1080,
-        "screen_height": 1600,
-        "screen_dpi": "320",
-        "memory": 6309,
-        "processor_details": "ARM64 FP ASIMD AES VMH | 2272 | 8",
-        "client_ip": "151.95.87.17"
+        "screen_width": 720,
+        "screen_height": 3200,
+        "screen_dpi": "314",
+        "memory": 3319,
+        "processor_details": "ARM64 FP ASIMD AES VMH | 2447 | 8",
+        "client_ip": "128.246.110.211"
     },
-    "7961179005": {
-        "unique_device_id": "Google|4aedfbf7-df0b-4d82-bd38-3d3327440254",
-        "brand": "Samsung",
-        "model": "SM-G998B",
-        "gpu_renderer": "Adreno (TM) 660",
-        "system_software": "Android OS 12 / API-31",
-        "screen_width": 1280,
-        "screen_height": 1600,
-        "screen_dpi": "420",
-        "memory": 4771,
-        "processor_details": "ARM64 FP ASIMD AES VMH | 2968 | 6",
-        "client_ip": "111.152.202.31"
+    "40329c091d8101c3c4f261bb7a0b4eee": {
+        "unique_device_id": "Google|1a3b2dd2-e8a9-4867-98f8-2ffc55096bc1",
+        "brand": "OPPO",
+        "model": "CPH2611",
+        "gpu_renderer": "Adreno (TM) 720",
+        "system_software": "Android OS 14 / API-34",
+        "screen_width": 720,
+        "screen_height": 2400,
+        "screen_dpi": "378",
+        "memory": 4480,
+        "processor_details": "ARM64 FP ASIMD AES VMH | 3129 | 9",
+        "client_ip": "151.127.199.142"
     }
 }
