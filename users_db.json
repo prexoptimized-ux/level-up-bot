@@ -1,0 +1,37 @@
+{
+  "f4xadil": {
+    "username": "f4xadil",
+    "password_hash": "7524c5edc6c2dc83bf0dee82a49a5df124efb5768b72b91ee36b8df74164e8f2",
+    "created_at": 1790784104.1438591,
+    "subscription": null,
+    "is_admin": true
+  },
+  "sdasdasd": {
+    "username": "sdasdasd",
+    "password_hash": "d8a928b2043db77e340b523547bf16cb4aa483f0645fe0a290ed1f20aab76257",
+    "created_at": 1790935970.119384,
+    "subscription": {
+      "plan_id": "plan_24h",
+      "plan_name": "Starter Pass",
+      "duration_label": "24 Hours",
+      "activated_at": 1790936062.3115528,
+      "expires_at": 1791022462.3115528,
+      "max_accounts": 1
+    },
+    "is_admin": false
+  },
+  "123": {
+    "username": "123",
+    "password_hash": "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4",
+    "created_at": 1790939644.3447456,
+    "subscription": {
+      "plan_id": "plan_30d",
+      "plan_name": "Overlord Pass",
+      "duration_label": "30 Days",
+      "activated_at": 1790939670.0917776,
+      "expires_at": 1793531670.0917776,
+      "max_accounts": 10
+    },
+    "is_admin": true
+  }
+}
