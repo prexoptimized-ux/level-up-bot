@@ -6,12 +6,12 @@ import time
 import uuid
 import hashlib
 import random
-from datetime import datetime      # 👈 ADD KARO
-import pytz                        # 👈 ADD KARO 
+from datetime import datetime
+import pytz
 from typing import Dict, List, Any, Optional, Tuple
 from aiohttp import web
 
-TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html") 
+TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html")
 
 # ==================== TIMEZONE CONFIG (INDIA - IST) ====================
 LOCAL_TZ = pytz.timezone("Asia/Kolkata")   # 🇮🇳 Indian Standard Time
@@ -29,8 +29,6 @@ def fmt_datetime() -> str:
     return now_local().strftime("%Y-%m-%d %H:%M:%S")
 # =====================================================================
 
-
-
 USERS_FILE = "users_db.json"
 PAYMENTS_FILE = "payments_db.json"
 ACCOUNTS_FILE = "accounts.json"
@@ -47,7 +45,7 @@ SUBSCRIPTION_PLANS = {
     "plan_24h": {
         "id": "plan_24h",
         "name": "Starter Pass",
-        "duration": 86400,        # 24 Hours
+        "duration": 86400,
         "duration_label": "24 Hours",
         "price": 29,
         "max_accounts": 1
@@ -55,7 +53,7 @@ SUBSCRIPTION_PLANS = {
     "plan_3d": {
         "id": "plan_3d",
         "name": "Grinder Pass",
-        "duration": 259200,       # 3 Days
+        "duration": 259200,
         "duration_label": "3 Days",
         "price": 69,
         "max_accounts": 2
@@ -63,7 +61,7 @@ SUBSCRIPTION_PLANS = {
     "plan_7d": {
         "id": "plan_7d",
         "name": "Veteran Pass",
-        "duration": 604800,       # 7 Days
+        "duration": 604800,
         "duration_label": "7 Days",
         "price": 129,
         "max_accounts": 4
@@ -71,7 +69,7 @@ SUBSCRIPTION_PLANS = {
     "plan_30d": {
         "id": "plan_30d",
         "name": "Overlord Pass",
-        "duration": 2592000,      # 30 Days
+        "duration": 2592000,
         "duration_label": "30 Days",
         "price": 349,
         "max_accounts": 10
@@ -221,12 +219,12 @@ class BotState:
             self.active_writers.pop(c, None)
 
     def log(self, message: str, level: str = "info", uid: Optional[str] = None, username: Optional[str] = None):
-    entry = {
-        "time": fmt_time(),              # 👈 IST time
-        "datetime": fmt_datetime(),      # 👈 Full IST datetime (optional)
-        "level": level,
-        "message": message,
-        "uid": str(uid) if uid else None
+        entry = {
+            "time": fmt_time(),
+            "datetime": fmt_datetime(),
+            "level": level,
+            "message": message,
+            "uid": str(uid) if uid else None
         }
         self.global_logs.append(entry)
         if len(self.global_logs) > 500:
@@ -297,7 +295,7 @@ class BotState:
                 "token": token or "",
                 "start_time": time.time(),
                 "is_paused": self.is_paused(uid_str),
-                "last_updated": time.strftime("%H:%M:%S")
+                "last_updated": fmt_time()
             }
         else:
             acc = self.accounts[uid_str]
@@ -317,7 +315,7 @@ class BotState:
             acc["remaining_exp"] = prog["remaining_exp"]
             acc["progress_pct"] = prog["progress_pct"]
             acc["likes"] = likes
-            acc["last_updated"] = time.strftime("%H:%M:%S")
+            acc["last_updated"] = fmt_time()
 
     def is_paused(self, uid: str) -> bool:
         uid_str = str(uid)
@@ -373,7 +371,7 @@ class BotState:
             acc["next_level"] = prog["next_level"]
             acc["remaining_exp"] = prog["remaining_exp"]
             acc["progress_pct"] = prog["progress_pct"]
-            acc["last_updated"] = time.strftime("%H:%M:%S")
+            acc["last_updated"] = fmt_time()
 
             diff = current_exp - old_exp
             if diff > 0:
@@ -386,14 +384,14 @@ class BotState:
             self.accounts[uid_str]["status"] = status
             if active_matches is not None:
                 self.accounts[uid_str]["active_matches"] = active_matches
-            self.accounts[uid_str]["last_updated"] = time.strftime("%H:%M:%S")
+            self.accounts[uid_str]["last_updated"] = fmt_time()
 
     def increment_match(self, uid: str):
         uid_str = str(uid)
         self.total_matches += 1
         if uid_str in self.accounts:
             self.accounts[uid_str]["matches_played"] += 1
-            self.accounts[uid_str]["last_match_time"] = time.strftime("%H:%M:%S")
+            self.accounts[uid_str]["last_match_time"] = fmt_time()
             self.log(f"⚔ Match #{self.accounts[uid_str]['matches_played']} Finished", "info", uid_str)
 
     def increment_match_started(self):
@@ -421,17 +419,15 @@ async def handle_index(request: web.Request) -> web.Response:
 async def handle_static_file(request: web.Request) -> web.Response:
     """Serve any file from the project root folder (qr.jpeg, etc.)"""
     filename = request.match_info.get('filename', '')
-    # Security: block path traversal
     if '..' in filename or filename.startswith('/'):
         return web.Response(status=403, text="Forbidden")
-    
+
     base_dir = os.path.dirname(os.path.abspath(__file__))
     file_path = os.path.join(base_dir, filename)
-    
+
     if not os.path.exists(file_path) or not os.path.isfile(file_path):
         return web.Response(status=404, text=f"Not Found: {filename}")
-    
-    # Detect content type by extension
+
     ext = os.path.splitext(filename)[1].lower()
     content_types = {
         '.png': 'image/png',
@@ -447,7 +443,7 @@ async def handle_static_file(request: web.Request) -> web.Response:
         '.txt': 'text/plain',
     }
     ctype = content_types.get(ext, 'application/octet-stream')
-    
+
     with open(file_path, 'rb') as f:
         return web.Response(body=f.read(), content_type=ctype)
 
@@ -515,11 +511,10 @@ async def handle_get_me(request: web.Request) -> web.Response:
     username = bot_state.get_user_from_request(request)
     if not username:
         return web.json_response({"authenticated": False})
-    
+
     is_sub, plan_info, remaining_sec = bot_state.is_user_subscribed(username)
     is_adm = bot_state.is_admin(username)
 
-    # Check for pending payments submitted by this user
     pending_order = None
     if os.path.exists(PAYMENTS_FILE):
         try:
@@ -597,7 +592,6 @@ async def handle_create_order(request: web.Request) -> web.Response:
         return web.json_response({"status": "error", "error": str(e)})
 
 async def handle_verify_payment(request: web.Request) -> web.Response:
-    """User submits FamPay UTR reference -> enters WAITING_APPROVAL status."""
     username = bot_state.get_user_from_request(request)
     if not username:
         return web.json_response({"status": "error", "error": "Login required"}, status=401)
@@ -621,7 +615,6 @@ async def handle_verify_payment(request: web.Request) -> web.Response:
         if not order:
             return web.json_response({"status": "error", "error": "Order reference not found."})
 
-        # Put under admin verification review
         order["status"] = "WAITING_APPROVAL"
         order["utr"] = utr
         order["submitted_at"] = time.time()
@@ -651,7 +644,6 @@ async def handle_admin_get_payments(request: web.Request) -> web.Response:
             with open(PAYMENTS_FILE, "r", encoding="utf-8") as f:
                 pdb = json.load(f)
             payments_list = list(pdb.values())
-            # Sort newest first
             payments_list.sort(key=lambda x: x.get("created_at", 0), reverse=True)
         except Exception:
             payments_list = []
@@ -687,7 +679,6 @@ async def handle_admin_approve_payment(request: web.Request) -> web.Response:
         if not user:
             return web.json_response({"status": "error", "error": f"User '{target_username}' not found."})
 
-        # Calculate extension or new expiry
         cur_expires = user.get("subscription", {}).get("expires_at", 0) if user.get("subscription") else 0
         base_time = max(time.time(), cur_expires)
         new_expiry = base_time + plan["duration"]
@@ -966,14 +957,14 @@ async def start_web_dashboard(host: str = "0.0.0.0", port: int = 20331):
     app.router.add_post("/api/auth/login", handle_login)
     app.router.add_post("/api/auth/logout", handle_logout)
     app.router.add_get("/api/auth/me", handle_get_me)
-    
+
     # FamPay & Admin Payment Routes
     app.router.add_post("/api/payment/create", handle_create_order)
     app.router.add_post("/api/payment/verify", handle_verify_payment)
     app.router.add_get("/api/admin/payments", handle_admin_get_payments)
     app.router.add_post("/api/admin/payment/approve", handle_admin_approve_payment)
     app.router.add_post("/api/admin/payment/reject", handle_admin_reject_payment)
-    
+
     # Bot Control Routes
     app.router.add_get("/api/stats", handle_get_stats)
     app.router.add_post("/api/account/add", handle_add_account)
@@ -983,7 +974,7 @@ async def start_web_dashboard(host: str = "0.0.0.0", port: int = 20331):
     app.router.add_post("/api/account/refresh", handle_refresh_account)
     app.router.add_post("/api/logs/clear", handle_clear_logs)
 
-    # 👇 YEH LINE ADD KARO — Static file serving (qr.jpeg ke liye)
+    # Static file serving (qr.jpeg ke liye)
     app.router.add_get("/{filename}", handle_static_file)
 
     runner = web.AppRunner(app)
