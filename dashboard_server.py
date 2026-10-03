@@ -6,10 +6,30 @@ import time
 import uuid
 import hashlib
 import random
+from datetime import datetime      # 👈 ADD KARO
+import pytz                        # 👈 ADD KARO 
 from typing import Dict, List, Any, Optional, Tuple
 from aiohttp import web
 
 TEMPLATE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "index.html") 
+
+# ==================== TIMEZONE CONFIG (INDIA - IST) ====================
+LOCAL_TZ = pytz.timezone("Asia/Kolkata")   # 🇮🇳 Indian Standard Time
+
+def now_local() -> datetime:
+    """Current time in IST"""
+    return datetime.now(LOCAL_TZ)
+
+def fmt_time() -> str:
+    """HH:MM:SS in IST"""
+    return now_local().strftime("%H:%M:%S")
+
+def fmt_datetime() -> str:
+    """YYYY-MM-DD HH:MM:SS in IST"""
+    return now_local().strftime("%Y-%m-%d %H:%M:%S")
+# =====================================================================
+
+
 
 USERS_FILE = "users_db.json"
 PAYMENTS_FILE = "payments_db.json"
@@ -201,11 +221,12 @@ class BotState:
             self.active_writers.pop(c, None)
 
     def log(self, message: str, level: str = "info", uid: Optional[str] = None, username: Optional[str] = None):
-        entry = {
-            "time": time.strftime("%H:%M:%S"),
-            "level": level,
-            "message": message,
-            "uid": str(uid) if uid else None
+    entry = {
+        "time": fmt_time(),              # 👈 IST time
+        "datetime": fmt_datetime(),      # 👈 Full IST datetime (optional)
+        "level": level,
+        "message": message,
+        "uid": str(uid) if uid else None
         }
         self.global_logs.append(entry)
         if len(self.global_logs) > 500:
